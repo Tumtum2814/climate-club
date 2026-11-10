@@ -1,0 +1,91 @@
+<!doctype html><meta charset="utf-8" /><title>
+  Unified Climate — synthetic browser fixture
+</title>
+<style>
+  body {
+    background: #0c1420;
+    color: #eef;
+    padding: 32px;
+    font-family: system-ui;
+  }
+  main {
+    max-width: 780px;
+    margin: auto;
+  }
+  p {
+    color: #aab;
+  }
+</style>
+<main>
+  <h1>Synthetic fixture — no real equipment</h1>
+  <p>
+    Browser verification only. History responses and services below are test
+    doubles, not a live Home Assistant connection.
+  </p>
+  <unified-climate-card></unified-climate-card>
+</main>
+<script type="module">
+  import "../../custom_components/unified_climate/frontend/unified-climate-card.js";
+  const card = document.querySelector("unified-climate-card");
+  const end = Date.now(),
+    start = end - 3600000;
+  const row = (minutes, state, unit = "°F") => ({
+    last_changed: new Date(start + minutes * 60000).toISOString(),
+    state: String(state),
+    attributes: { unit_of_measurement: unit },
+  });
+  window.calls = [];
+  window.requests = [];
+  card.setConfig({ entity: "climate.fixture", hours: 1 });
+  card.hass = {
+    states: {
+      "climate.fixture": {
+        state: "off",
+        attributes: {
+          friendly_name: "Living area",
+          temperature_unit: "°F",
+          current_temperature: 70.4,
+          target_temp_low: 68,
+          target_temp_high: 75,
+          hvac_modes: ["off", "heat", "cool", "heat_cool"],
+          requested_action: "off",
+          history_sensors: {
+            indoor: "sensor.indoor",
+            outdoor: "sensor.outdoor",
+            operation: "sensor.operation",
+          },
+        },
+      },
+    },
+    callApi: async (method, path) => {
+      window.requests.push({ method, path });
+      return [
+        [
+          [0, 67],
+          [10, 68],
+          [20, 70],
+          [30, 72],
+          [40, 71],
+          [50, 70],
+          [59, 70.4],
+        ].map(([m, v]) => ({ ...row(m, v), entity_id: "sensor.indoor" })),
+        [
+          [0, 43],
+          [10, 44],
+          [20, 45],
+          [30, 46],
+          [40, 45],
+          [50, 44],
+          [59, 43.5],
+        ].map(([m, v]) => ({ ...row(m, v), entity_id: "sensor.outdoor" })),
+        [
+          [0, "heating"],
+          [23, "cooling"],
+          [42, "idle"],
+          [54, "unknown"],
+        ].map(([m, v]) => ({ ...row(m, v), entity_id: "sensor.operation" })),
+      ];
+    },
+    callService: async (...args) => window.calls.push(args),
+  };
+</script>

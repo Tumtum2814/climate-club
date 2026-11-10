@@ -1,0 +1,79 @@
+{
+  "title": "Unified Climate",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configure physical zone",
+        "description": "One entry per independently controllable physical zone. Rooms heated by ONE Ecobee must remain ONE zone; software cannot split that heating coverage. Each thermostat/AC can be assigned only once. Starts Off/unowned; enabling acquires equipment. All temperature settings below are Fahrenheit. Verify independent freeze-safe native behavior before enabling.",
+        "data": {
+          "name": "Zone name",
+          "sensors": "Indoor temperature sensors",
+          "heaters": "Physical heating thermostats",
+          "coolers": "AC climate controllers",
+          "trusted_action_entities": "Verified HVAC-action reporters (leave empty for unverified IR)",
+          "outdoor_sensor": "Outdoor temperature sensor (optional, history only)",
+          "aggregation": "Indoor sensor aggregation",
+          "hysteresis": "Hysteresis (°F)",
+          "stop_early": "Hot-water stop-early offset (°F)",
+          "heat_target": "Indoor heat target (°F)",
+          "cool_target": "Indoor cool target (°F)",
+          "min_band": "Minimum heat/cool target gap (°F)",
+          "heat_min_on": "Minimum heating on (seconds)",
+          "heat_min_off": "Minimum heating off (seconds)",
+          "cool_min_on": "Minimum cooling on (seconds)",
+          "cool_min_off": "Minimum cooling off (seconds)",
+          "startup_delay": "Startup lockout (seconds)",
+          "changeover_delay": "House heat/cool changeover delay (seconds)",
+          "stale_after": "Maximum sensor update age (seconds)",
+          "heat_demand": "Native heating demand setpoint (°F)",
+          "cool_demand": "Native cooling demand setpoint (°F)"
+        },
+        "data_description": {
+          "trusted_action_entities": "Select only mapped actuators whose hvac_action you independently verified is actual equipment feedback. IR mode/state is not compressor verification. Every mapped actuator must be trusted for known operation history.",
+          "outdoor_sensor": "Optional history trace only; indoor control does not depend on outdoor temperature."
+        }
+      }
+    },
+    "error": {
+      "invalid_zone": "Invalid zone: select sensors and distinct physical actuators, no reuse/virtual entities, keep separated targets, and use safe timing/setpoint bounds. See README for limits."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Configure physical zone",
+        "description": "One entry per independently controllable physical zone. Rooms heated by ONE Ecobee must remain ONE zone; software cannot split that heating coverage. Each thermostat/AC can be assigned only once. Starts Off/unowned; enabling acquires equipment. All temperature settings below are Fahrenheit. Verify independent freeze-safe native behavior before enabling.",
+        "data": {
+          "name": "Zone name",
+          "sensors": "Indoor temperature sensors",
+          "heaters": "Physical heating thermostats",
+          "coolers": "AC climate controllers",
+          "trusted_action_entities": "Verified HVAC-action reporters (leave empty for unverified IR)",
+          "outdoor_sensor": "Outdoor temperature sensor (optional, history only)",
+          "aggregation": "Indoor sensor aggregation",
+          "hysteresis": "Hysteresis (°F)",
+          "stop_early": "Hot-water stop-early offset (°F)",
+          "heat_target": "Indoor heat target (°F)",
+          "cool_target": "Indoor cool target (°F)",
+          "min_band": "Minimum heat/cool target gap (°F)",
+          "heat_min_on": "Minimum heating on (seconds)",
+          "heat_min_off": "Minimum heating off (seconds)",
+          "cool_min_on": "Minimum cooling on (seconds)",
+          "cool_min_off": "Minimum cooling off (seconds)",
+          "startup_delay": "Startup lockout (seconds)",
+          "changeover_delay": "House heat/cool changeover delay (seconds)",
+          "stale_after": "Maximum sensor update age (seconds)",
+          "heat_demand": "Native heating demand setpoint (°F)",
+          "cool_demand": "Native cooling demand setpoint (°F)"
+        },
+        "data_description": {
+          "trusted_action_entities": "Select only mapped actuators whose hvac_action you independently verified is actual equipment feedback. IR mode/state is not compressor verification. Every mapped actuator must be trusted for known operation history.",
+          "outdoor_sensor": "Optional history trace only; indoor control does not depend on outdoor temperature."
+        }
+      }
+    },
+    "error": {
+      "invalid_zone": "Invalid zone: select sensors and distinct physical actuators, no reuse/virtual entities, keep separated targets, and use safe timing/setpoint bounds. See README for limits."
+    }
+  }
+}
