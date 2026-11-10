@@ -12,10 +12,19 @@ from .settings import DEFAULTS, validate
 def schema(values):
     fields = {}
     fields[vol.Required("name", default=values["name"])] = selector.TextSelector()
-    for key in ("sensors", "heaters", "coolers", "trusted_action_entities"):
+    for key in (
+        "sensors",
+        "heaters",
+        "coolers",
+        "trusted_action_entities",
+        "response_sensors",
+    ):
         fields[vol.Required(key, default=values[key])] = selector.EntitySelector(
             selector.EntitySelectorConfig(
-                domain="sensor" if key == "sensors" else "climate", multiple=True
+                domain="sensor"
+                if key in ("sensors", "response_sensors")
+                else "climate",
+                multiple=True,
             )
         )
     outdoor = vol.Optional(
@@ -30,11 +39,17 @@ def schema(values):
         )
     )
     for key, default in DEFAULTS.items():
-        if isinstance(default, (float, int)):
+        if isinstance(default, bool):
+            fields[vol.Required(key, default=values[key])] = selector.BooleanSelector()
+        elif isinstance(default, (float, int)):
             fields[vol.Required(key, default=values[key])] = selector.NumberSelector(
                 selector.NumberSelectorConfig(
                     mode=selector.NumberSelectorMode.BOX,
-                    step=0.1 if isinstance(default, float) else 1,
+                    step=0.001
+                    if key == "response_threshold"
+                    else 0.1
+                    if isinstance(default, float)
+                    else 1,
                     unit_of_measurement="°F"
                     if key
                     in (
@@ -46,6 +61,10 @@ def schema(values):
                         "heat_demand",
                         "cool_demand",
                     )
+                    else "°F/min"
+                    if key == "response_threshold"
+                    else "reports"
+                    if key == "response_min_samples"
                     else "s",
                 )
             )

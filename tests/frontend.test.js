@@ -6,6 +6,39 @@ const row = (seconds, state, unit = "°F") => ({
   state: String(state),
   attributes: { unit_of_measurement: unit },
 });
+test("inferred history splits unknown intervals, never overrides trusted action or treats demand as evidence", () => {
+  const indoor = [row(0, 75), row(100, 74)];
+  const inferred = [
+    row(0, "observing_start"),
+    row(20, "cooling_likely"),
+    row(50, "stopped_likely"),
+    row(70, "continued_cooling"),
+    row(80, "cool"),
+  ];
+  const lines = segments(
+    indoor,
+    [row(60, "heating"), row(65, "unknown")],
+    1800000,
+    inferred,
+  );
+  assert.deepEqual(
+    lines.map((l) => l.action),
+    [
+      "unknown",
+      "inferred_cooling",
+      "inferred_idle",
+      "heating",
+      "inferred_idle",
+      "unknown",
+      "unknown",
+    ],
+  );
+  assert.equal(
+    segments(indoor, [], 1800000, [row(0, "cool")])[0].action,
+    "unknown",
+  );
+});
+
 test("splits indoor line at observed heating/cooling boundaries and converts C to F", () => {
   const lines = segments(
     [row(0, 20, "°C"), row(100, 22, "°C")],

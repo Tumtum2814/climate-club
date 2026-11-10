@@ -6,6 +6,7 @@ from homeassistant.core import callback
 from homeassistant.exceptions import ConfigEntryError
 from homeassistant.helpers.event import (
     async_track_state_change_event,
+    async_track_state_report_event,
     async_track_time_interval,
 )
 
@@ -36,7 +37,9 @@ async def async_setup_entry(hass, entry):
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     @callback
-    def schedule(_):
+    def schedule(event):
+        if hasattr(event, "data") and "entity_id" in event.data:
+            manager.feedback(zone, event)
         entry.async_create_background_task(
             hass, manager.tick(), "Unified Climate reconcile"
         )
@@ -54,6 +57,14 @@ async def async_setup_entry(hass, entry):
             schedule,
         )
     )
+
+    @callback
+    def feedback(event):
+        manager.feedback(zone, event)
+
+    if zone.config["response_enabled"]:
+        for tracker in (async_track_state_change_event, async_track_state_report_event):
+            entry.async_on_unload(tracker(hass, zone.response.sensors, feedback))
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
 

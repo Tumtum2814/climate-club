@@ -1,5 +1,7 @@
 # Executed verification and boundaries
 
+> **Prior baseline:** Everything through the original “Explicit limitations” section below records the 0.1.0 implementation, not current 0.2.0 results. Its 35/3 test totals, browser screenshot and metadata limitation are historical. The repository metadata is now supplied for `https://github.com/Tumtum2814/climate-club`; no publication action was performed for this change. Current executed monitoring evidence is appended under **0.2.0 temperature-response monitoring**.
+
 ## Environment / commands
 
 Executed locally in this project with:
@@ -80,3 +82,52 @@ This is real-browser rendering/interaction evidence, **not** a live dashboard in
 - One physical heat thermostat cannot become multiple independent room heat zones. Global first-eligible arbitration is conservative and has no fairness/energy optimization.
 - Public GitHub repository URL and owner are intentionally absent. Manual source installation is ready; HACS repository validation/distribution remains blocked until real public-repository metadata is supplied. The release helper does not publish or verify repository existence.
 - Only HA 2026.11.1 / Python 3.14.6 and Node 26.7.0 were executed. GitHub Actions configuration was created but not run remotely. No publish, push or commit was performed.
+
+## 0.2.0 temperature-response monitoring — current evidence
+
+Implemented and exercised locally against **Home Assistant 2026.11.1, Python 3.14.6 and Node v26.7.0**, without live HA, credentials, cloud endpoints or equipment. Manifest and dashboard resource references are now 0.2.0; domain, prior entity unique IDs and trusted Operation semantics remain compatible. The prior baseline above is retained as history, not presented as current evidence.
+
+### Executed gates
+
+```sh
+PY=/Users/tom/.hermes/cache/scratch/unified-climate-venv/bin/python
+$PY -m pytest tests -q --timeout=20 --basetemp=/Users/tom/.hermes/cache/scratch/climate-club-response-pytest --junitxml=artifacts/response-pytest.xml
+/Users/tom/.hermes/tools/node-26.7.0-darwin-arm64/bin/node --test tests/*.test.js
+/Users/tom/.hermes/cache/scratch/unified-climate-venv/bin/ruff check custom_components tests scripts
+/Users/tom/.hermes/cache/scratch/unified-climate-venv/bin/ruff format --check custom_components tests scripts
+/Users/tom/.hermes/tools/node-26.7.0-darwin-arm64/bin/node node_modules/prettier/bin/prettier.cjs --check custom_components/unified_climate/frontend/unified-climate-card.js tests/card.test.js tests/frontend.test.js
+$PY scripts/build.py
+```
+
+Observed functional results: **61 Python tests passed**, **5 Node tests passed**. Python still emits the **5 upstream deprecation warnings** described above; they were not suppressed. Ruff check, Ruff format check, Prettier check and `git diff --check` pass. Raw current outputs are retained in ignored `artifacts/response-pytest.txt`, `artifacts/response-pytest.xml` and `artifacts/response-node.txt`. The source/manual-install ZIP is rebuilt as `dist/unified-climate.zip`; CRC and required monitoring/frontend/manifest members are checked locally. No commit, push or live commissioning was performed.
+
+### Successive behavioral RED → GREEN slices
+
+Required development/testing/TDD skills were loaded before implementation. New behavior was added through tested slices; minimal importable interfaces were used rather than treating collection errors as RED. Representative actual observed failures and fixes:
+
+| Test / slice | Observed RED | Observed GREEN |
+|---|---|---|
+| `test_monitor_settings_are_opt_in_and_validate` | Missing `response_enabled` returned None, not False | Default-off settings, duplicate feedback-ID handling, numeric/integral/bool/range rejection pass |
+| `test_start_warming_to_flat_is_consistent_after_grace` | State remained inconclusive instead of observing_start | Warming baseline → flat post-grace produces cooling_likely |
+| `test_stop_weakening_does_not_require_warming` | Both stop cases incorrectly returned no_start_response | Weaker falling response gives stopped_likely; sustained falling gives continued_cooling |
+| `test_evidence_boundaries` | Error/invalid/unit-change inferred success; retry reset anchor; stale baseline retained; long post-window lost samples | Ambiguous/missing/stale/invalid evidence stays inconclusive, retries retain anchor, post-window retention passes |
+| Real-HA `test_temperature_response_end_to_end_reports_commands_and_history` | Boolean monitor setting was rejected by the numeric selector; later source-event ordering missed the last baseline sample | Real UI flow, timer-deferred start, source reports including equal-value reports, actual mode-service start/stop, diagnostics and separate trusted/inferred sensors pass |
+| Runtime numeric-format / command-audit slices | Formatting-only report counted as numeric evidence; issued-command audit was absent | Metadata/numeric-format changes excluded; no-op and retry-deferred work unissued; ambiguous mode service is audited error/unknown |
+| `test_staggered_multi_sensor_reports_build_independent_trends_without_fake_aggregate_samples` | Missing second sensor repeatedly erased first sensor's initial baseline | Independent fixed-membership sensor baselines and per-sensor minimums pass |
+| `test_cooling_monitor_anchors_baseline_before_awaited_service` | Started at service completion 30 instead of issuance 0; included reading taken during await in baseline | Baseline anchored before awaited service; successful delivery with unconfirmed reported mode is still advisory, never physical proof |
+| `test_heating_reports_cannot_create_cooling_evidence` | Heating source event entered the cooling baseline | Heating contamination clears evidence to inconclusive |
+| Observation diagnostics / small-slope UI tuning | Post count stayed empty during observation; selector step was 0.1 instead of 0.001 | Live per-sensor counts and baseline slope, sub-tenth threshold tuning pass |
+| `test_preexisting_cooling_alone_is_not_a_start_response` | Same preexisting falling trend yielded cooling_likely | Requires meaningful baseline-to-post change for startup |
+| Immutable source-report identity | Used mutable State.last_reported instead of original event timestamp | Source event timestamp deduplication survives later State.last_reported mutation |
+| Frontend inferred timeline transform | Only three actual-action intervals, missing inferred boundaries | Inferred cooling/stopped and uncertainty split intervals; trusted actions win; requested Cool is not inference |
+| Actual card custom element in jsdom | Authenticated history URL omitted sensor.inferred | Optional inferred history fetched and dashed blue/gray/purple paths/legend rendered; old mappings still pass; rendering sends no control services |
+
+Fixture mistakes (climate component replacing early service doubles, metric display units in a Fahrenheit-only double, and the Event constructor's `time_fired_timestamp` argument) were corrected and are not counted as behavioral implementation RED. Additional regression assertions for Celsius conversion, mean/median slopes, duplicate source identities/config IDs, disabled monitoring, superseding stop/error, options reload/feedback override and unchanged control aggregation passed against the implemented behavior; these are not misrepresented as additional RED cycles.
+
+### Runtime and scope findings
+
+Inspected the installed HA release source: `async_track_state_report_event` handles unchanged state/attributes, opposite `state_changed`; StateMachine updates `State.last_reported` in place for unchanged reports. Monitoring therefore combines source change/report events, uses immutable source timestamps, ignores metadata-only/numeric-format changes and conservatively ignores equal-valued forced change events. HA source report freshness is not a guarantee of a new physical measurement.
+
+Actual HA tests run local state machines, registries, config/options flows, entity platforms, source-event subscribers, service doubles and safe unload/reload. The complete start/stop test proves exactly one setpoint/start/stop sequence, no monitor-triggered retries, timer-deferred demand with no monitor, separate unknown trusted Operation, fresh equal-valued source reports, override-only feedback, reset after options reload and no control-temperature changes from feedback overrides. Existing safety/timer/retry/interlock tests all remain green. The monitor is not read by the control demand, command retry or house-interlock policy.
+
+Node tests execute actual history transformations and the production custom element in jsdom through a locally doubled `hass.callApi`; no live Recorder database or authenticated HA backend was contacted. The original browser screenshot is **prior-baseline evidence only**; no new real-browser monitoring screenshot or hardware validation is claimed. No full Recorder persistence test, appliance tuning guarantee or per-AC IR success attribution is claimed. Sensor outcomes describe the last command-response window, not continuous physical compressor telemetry; continued cooling after Off may be natural. README documents setup, defaults/bounds, measurement/report caveats, recording, notifications via user automations and these limitations.

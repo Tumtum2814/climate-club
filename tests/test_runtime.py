@@ -42,6 +42,134 @@ async def rig(tmp_path):
     await hass.async_stop()
 
 
+async def test_change_report_identity_uses_event_timestamp_not_mutable_state_reported(
+    rig,
+):
+    from datetime import timedelta
+
+    from homeassistant.core import Event, State
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.unified_climate.response import ResponseMonitor
+
+    hass, manager, zone, calls, now = rig
+    hass.states.async_set("climate.heat", "off")
+    zone.config["response_enabled"] = True
+    zone.response = ResponseMonitor(zone.config)
+    state = State("sensor.room", "75", {"unit_of_measurement": "°F"})
+    original = dt_util.utcnow() - timedelta(seconds=3)
+    event = Event(
+        "state_changed",
+        {"entity_id": "sensor.room", "new_state": state},
+        time_fired_timestamp=original.timestamp(),
+    )
+    manager.feedback(zone, event)
+    assert zone.response.identities["sensor.room"] == original
+    state.last_reported = dt_util.utcnow()
+    manager.feedback(zone, event)
+    assert len(zone.response.samples["sensor.room"]) == 1
+
+
+async def test_heating_reports_cannot_create_cooling_evidence(rig):
+    from homeassistant.core import Event, State
+
+    from custom_components.unified_climate.response import ResponseMonitor
+
+    hass, manager, zone, calls, now = rig
+    zone.config["response_enabled"] = True
+    zone.response = ResponseMonitor(zone.config)
+    state = State("sensor.room", "75", {"unit_of_measurement": "°F"})
+    manager.feedback(
+        zone, Event("state_changed", {"entity_id": "sensor.room", "new_state": state})
+    )
+    assert zone.response.samples["sensor.room"] == []
+    assert "Heating" in zone.response.reason
+
+
+async def test_cooling_monitor_anchors_baseline_before_awaited_service(rig):
+    hass, manager, zone, calls, now = rig
+    zone = manager.add(
+        "cool",
+        {
+            "sensors": ["sensor.room"],
+            "coolers": ["climate.ac"],
+            "response_enabled": True,
+        },
+    )
+    hass.states.async_set(
+        "climate.ac",
+        "off",
+        {"temperature": 65, "temperature_unit": "°F", "min_temp": 60, "max_temp": 85},
+    )
+    zone.response.reading("sensor.room", "76", "°F", 0, 0)
+
+    async def delayed(call):
+        now[0] = 30
+        zone.response.reading("sensor.room", "74", "°F", 30, 30)
+
+    hass.services.async_register("climate", "set_hvac_mode", delayed)
+    await manager.command(zone, "climate.ac", "cool", 65)
+    assert zone.response.started == 0
+    assert zone.response.baseline["sensor.room"] == [(0, 76.0)]
+    assert zone.cooling_commands[-1]["outcome"] == "delivered"
+
+
+async def test_feedback_numeric_format_and_metadata_are_not_measurements(rig):
+    from homeassistant.core import Event, State
+
+    hass, manager, zone, calls, now = rig
+    zone.config["response_enabled"] = True
+    from custom_components.unified_climate.response import ResponseMonitor
+
+    zone.response = ResponseMonitor(zone.config)
+    hass.states.async_set("climate.heat", "off")
+    old = State("sensor.room", "75", {"unit_of_measurement": "°F"})
+    first = State("sensor.room", "75.0", {"unit_of_measurement": "°F", "battery": 50})
+    manager.feedback(
+        zone,
+        Event(
+            "state_changed",
+            {"entity_id": "sensor.room", "old_state": old, "new_state": first},
+        ),
+    )
+    assert zone.response.samples["sensor.room"] == []
+
+
+async def test_cooling_command_audit_keeps_errors_unknown_and_noop_unissued(rig):
+    from homeassistant.exceptions import HomeAssistantError
+
+    hass, manager, zone, calls, now = rig
+    zone = manager.add(
+        "cool",
+        {
+            "sensors": ["sensor.room"],
+            "coolers": ["climate.ac"],
+            "response_enabled": True,
+        },
+    )
+    hass.states.async_set(
+        "climate.ac",
+        "off",
+        {"temperature": 65, "temperature_unit": "°F", "min_temp": 60, "max_temp": 85},
+    )
+    await manager.command(zone, "climate.ac", "off", None)
+    assert getattr(zone, "cooling_commands", []) == []
+
+    async def fail(call):
+        raise HomeAssistantError("Ambiguous IR delivery")
+
+    hass.services.async_register("climate", "set_hvac_mode", fail)
+    await manager.command(zone, "climate.ac", "cool", 65)
+    assert zone.response.state == "inconclusive"
+    assert "error" in zone.response.reason
+    assert zone.cooling_commands[-1]["outcome"] == "error"
+    assert zone.cooling_commands[-1]["action"] == "start"
+    assert zone.cooling_commands[-1]["entity_id"] == "climate.ac"
+    now[0] = 1
+    await manager.command(zone, "climate.ac", "cool", 65)
+    assert len(zone.cooling_commands) == 1
+
+
 async def test_observed_external_stop_restarts_minimum_off_timer(rig):
     hass, manager, zone, calls, now = rig
     await manager.set_mode("one", "heat")

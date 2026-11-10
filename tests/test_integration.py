@@ -32,6 +32,112 @@ async def ha(tmp_path):
     await hass.async_block_till_done()
 
 
+async def test_temperature_response_end_to_end_reports_commands_and_history(ha):
+    from homeassistant.util.unit_system import US_CUSTOMARY_SYSTEM
+
+    from custom_components.unified_climate import DOMAIN
+
+    ha.config.units = US_CUSTOMARY_SYSTEM
+    ha.states.async_set("sensor.room", "79", {"unit_of_measurement": "°F"})
+    ha.states.async_set(
+        "climate.ac",
+        "off",
+        {"temperature": 75, "temperature_unit": "°F", "min_temp": 60, "max_temp": 85},
+    )
+    calls = []
+
+    async def service(call):
+        calls.append(dict(call.data))
+        old = ha.states.get("climate.ac")
+        attrs = dict(old.attributes)
+        if "temperature" in call.data:
+            attrs["temperature"] = call.data["temperature"]
+        ha.states.async_set("climate.ac", call.data.get("hvac_mode", old.state), attrs)
+
+    for name in ("set_temperature", "set_hvac_mode"):
+        ha.services.async_register("climate", name, service)
+    flow = await ha.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+    result = await ha.config_entries.flow.async_configure(
+        flow["flow_id"],
+        {
+            "name": "Response",
+            "sensors": ["sensor.room"],
+            "coolers": ["climate.ac"],
+            "response_enabled": True,
+            "response_start_grace": 60,
+            "response_stop_settling": 60,
+            "response_start_window": 120,
+            "response_stop_window": 120,
+        },
+    )
+    assert result["type"] == "create_entry"
+    await ha.async_block_till_done()
+    manager = ha.data[DOMAIN]
+    for name in ("set_temperature", "set_hvac_mode"):
+        ha.services.async_register("climate", name, service)
+    zone = manager.zones[result["result"].entry_id]
+    assert getattr(zone, "response", None) is not None
+    now = [0.0]
+    manager.clock = lambda: now[0]
+    await manager.set_mode(result["result"].entry_id, "cool")
+    assert zone.response.started is None  # Desired but timer-deferred, no command.
+    for t, v in [(180, 79.6), (240, 79.8), (300, 80), (361, 80), (420, 80), (480, 80)]:
+        now[0] = t
+        ha.states.async_set("sensor.room", str(v), {"unit_of_measurement": "°F"})
+        await ha.async_block_till_done()
+        await manager.tick()
+    assert zone.response.state == "cooling_likely", (
+        zone.response.diagnostics,
+        zone.response.samples,
+        calls,
+    )
+    assert zone.response.started == 300
+    climate = next(
+        s for s in ha.states.async_all("climate") if s.entity_id != "climate.ac"
+    )
+    ids = climate.attributes["history_sensors"]
+    assert ha.states.get(ids["response"]).state == "cooling_likely"
+    assert ha.states.get(ids["inferred_operation"]).state == "cooling_likely"
+    assert ha.states.get(ids["operation"]).state == "unknown"
+    assert climate.attributes["cooling_response"]["post_counts"] == {"sensor.room": 3}
+    assert (
+        climate.attributes["cooling_response"]["freshness_seconds"]["sensor.room"] < 1
+    )
+    assert climate.attributes["cooling_commands"][-1]["action"] == "start"
+    assert (
+        ha.states.get(ids["response"]).attributes["cooling_commands"][-1]["outcome"]
+        == "delivered"
+    )
+    await manager.set_mode(result["result"].entry_id, "off")
+    for t in (541, 600, 660):
+        now[0] = t
+        ha.states.async_set("sensor.room", "80", {"unit_of_measurement": "°F"})
+        await ha.async_block_till_done()
+        await manager.tick()
+    assert zone.response.state == "stopped_likely"
+    assert len(calls) == 3  # Setpoint, start, stop only; monitor never commands.
+    entry = result["result"]
+    options = await ha.config_entries.options.async_init(entry.entry_id)
+    saved = await ha.config_entries.options.async_configure(
+        options["flow_id"], {"response_sensors": ["sensor.feedback"]}
+    )
+    assert saved["type"] == "create_entry"
+    await ha.async_block_till_done()
+    reset = manager.zones[entry.entry_id]
+    assert reset is not zone
+    assert reset.response.state == "inconclusive"
+    assert reset.response.samples == {"sensor.feedback": []}
+    assert reset.owned is False
+    ha.states.async_set("sensor.feedback", "40", {"unit_of_measurement": "°F"})
+    await ha.async_block_till_done()
+    assert len(reset.response.samples["sensor.feedback"]) == 1
+    assert (
+        reset.temperature == 80
+    )  # Feedback override never changes control aggregation.
+    assert len(calls) == 3
+    assert await ha.config_entries.async_unload(entry.entry_id)
+
+
 async def test_ui_creates_off_climate_and_services_set_targets(ha):
     result = await ha.config_entries.flow.async_init(
         "unified_climate", context={"source": "user"}

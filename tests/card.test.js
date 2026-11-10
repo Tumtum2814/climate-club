@@ -8,6 +8,64 @@ globalThis.HTMLElement = dom.window.HTMLElement;
 globalThis.customElements = dom.window.customElements;
 globalThis.document = dom.window.document;
 await import("../custom_components/unified_climate/frontend/unified-climate-card.js");
+test("card fetches optional inferred history through authenticated API and renders distinct dashed evidence", async () => {
+  const card = document.createElement("unified-climate-card");
+  card.setConfig({ entity: "climate.zone" });
+  const start = Date.now() - 300000;
+  const rows = (id, states) =>
+    states.map(([offset, state]) => ({
+      entity_id: id,
+      last_changed: new Date(start + offset).toISOString(),
+      state: String(state),
+      attributes: { unit_of_measurement: "°F" },
+    }));
+  let requested;
+  card.hass = {
+    states: {
+      "climate.zone": {
+        state: "cool",
+        attributes: {
+          history_sensors: {
+            indoor: "sensor.indoor",
+            operation: "sensor.op",
+            inferred_operation: "sensor.inferred",
+          },
+        },
+      },
+    },
+    callApi: async (method, url) => {
+      requested = [method, url];
+      return [
+        rows("sensor.indoor", [
+          [0, 75],
+          [240000, 74],
+        ]),
+        rows("sensor.op", [[0, "unknown"]]),
+        rows("sensor.inferred", [
+          [0, "cooling_likely"],
+          [60000, "stopped_likely"],
+          [120000, "observing_start"],
+        ]),
+      ];
+    },
+    callService: async () => {
+      throw new Error("monitor must not control");
+    },
+  };
+  await new Promise((r) => setTimeout(r, 30));
+  assert.equal(requested[0], "GET");
+  assert.match(decodeURIComponent(requested[1]), /sensor.inferred/);
+  for (const action of ["inferred_cooling", "inferred_idle", "unknown"]) {
+    assert.ok(
+      card.shadowRoot
+        .querySelector(`[data-action="${action}"]`)
+        .hasAttribute("stroke-dasharray"),
+    );
+  }
+  assert.match(card.shadowRoot.textContent, /Inferred cooling/);
+  assert.match(card.shadowRoot.textContent, /Inferred stopped/);
+});
+
 test("card loads authenticated native history, plots colors/outside and controls only on user input", async () => {
   const requests = [],
     services = [];

@@ -26,6 +26,15 @@
           "changeover_delay": "House heat/cool changeover delay (seconds)",
           "stale_after": "Maximum sensor update age (seconds)",
           "heat_demand": "Native heating demand setpoint (°F)",
+          "response_enabled": "Enable advisory cooling temperature-response monitoring",
+          "response_sensors": "Feedback temperature sensors (empty uses indoor sensors)",
+          "response_start_grace": "Cooling startup grace (seconds)",
+          "response_stop_settling": "Cooling shutdown settling (seconds)",
+          "response_baseline_window": "Pre-command baseline window (seconds)",
+          "response_start_window": "Start observation after grace (seconds)",
+          "response_stop_window": "Stop observation after settling (seconds)",
+          "response_min_samples": "Minimum fresh reports per sensor per window",
+          "response_threshold": "Meaningful trend change (°F/min)",
           "cool_demand": "Native cooling demand setpoint (°F)"
         },
         "data_description": {
@@ -64,6 +73,15 @@
           "changeover_delay": "House heat/cool changeover delay (seconds)",
           "stale_after": "Maximum sensor update age (seconds)",
           "heat_demand": "Native heating demand setpoint (°F)",
+          "response_enabled": "Enable advisory cooling temperature-response monitoring",
+          "response_sensors": "Feedback temperature sensors (empty uses indoor sensors)",
+          "response_start_grace": "Cooling startup grace (seconds)",
+          "response_stop_settling": "Cooling shutdown settling (seconds)",
+          "response_baseline_window": "Pre-command baseline window (seconds)",
+          "response_start_window": "Start observation after grace (seconds)",
+          "response_stop_window": "Stop observation after settling (seconds)",
+          "response_min_samples": "Minimum fresh reports per sensor per window",
+          "response_threshold": "Meaningful trend change (°F/min)",
           "cool_demand": "Native cooling demand setpoint (°F)"
         },
         "data_description": {

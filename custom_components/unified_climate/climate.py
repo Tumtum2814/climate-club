@@ -82,8 +82,16 @@ class UnifiedClimate(ClimateEntity):
                 kind: registry.async_get_entity_id(
                     "sensor", DOMAIN, f"{self.key}_{kind}"
                 )
-                for kind in ("indoor", "outdoor", "operation")
+                for kind in (
+                    "indoor",
+                    "outdoor",
+                    "operation",
+                    "response",
+                    "inferred_operation",
+                )
             },
+            "cooling_response": self.zone.response.diagnostics,
+            "cooling_commands": list(self.zone.cooling_commands),
             "requested_action": self.zone.requested,
             "owns_equipment": self.zone.owned,
             "control_error": self.zone.error,

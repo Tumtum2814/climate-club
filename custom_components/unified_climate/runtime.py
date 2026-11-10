@@ -10,6 +10,7 @@ from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import TemperatureConverter
 
 from .control import aggregate, demand
+from .response import ResponseMonitor
 from .settings import validate
 
 
@@ -25,6 +26,8 @@ class Zone:
     enabled_at: float = 0
     outdoor: float | None = None
     listeners: list = field(default_factory=list)
+    response: ResponseMonitor | None = None
+    cooling_commands: list = field(default_factory=list)
 
 
 class Manager:
@@ -79,7 +82,53 @@ class Manager:
             for e in z.config["heaters"] + z.config["coolers"]
         ]
         self.zones[key] = Zone(validate(config, others))
+        self.zones[key].response = ResponseMonitor(self.zones[key].config)
         return self.zones[key]
+
+    def feedback(self, zone, event):
+        """Consume source events, never manager rereads or metadata-only changes."""
+        data = event.data
+        entity = data["entity_id"]
+        if entity not in zone.response.sensors:
+            return
+        if "heat" in self.house_directions() or zone.requested == "heat":
+            zone.response.invalidate("Heating contamination; cooling inference invalid")
+            return
+        state = data.get("new_state")
+        old = data.get("old_state")
+        if state is None:
+            zone.response.invalidate("Feedback entity removed")
+            return
+        if old and old.attributes.get("unit_of_measurement") == state.attributes.get(
+            "unit_of_measurement"
+        ):
+            old_number = aggregate(
+                [(old.state, old.attributes.get("unit_of_measurement"), 0)]
+            )
+            new_number = aggregate(
+                [(state.state, state.attributes.get("unit_of_measurement"), 0)]
+            )
+            if old_number is not None and old_number == new_number:
+                return
+        # State.last_reported is mutated in-place on equal-valued reports.
+        # Use the event's immutable source timestamp, not a later state reread.
+        reported = data.get("last_reported", event.time_fired)
+        age = (dt_util.utcnow() - reported).total_seconds()
+        if not 0 <= age <= zone.config["stale_after"]:
+            zone.response.invalidate("Feedback report outside freshness bounds")
+            return
+        zone.response.reading(
+            entity,
+            state.state,
+            state.attributes.get("unit_of_measurement"),
+            reported,
+            self.clock() - age,
+        )
+        zone.response.advance(self.clock())
+        for listener in list(zone.listeners):
+            listener()
+        if zone.callback:
+            zone.callback()
 
     async def set_mode(self, key, mode):
         async with self.lock:
@@ -171,6 +220,7 @@ class Manager:
             zone.error = f"{entity}: awaiting retry"
             return
         self.attempts[entity] = (self.clock(), desired)
+        issued = None
         try:
             if desired != "off":
                 await self.hass.services.async_call(
@@ -184,6 +234,8 @@ class Manager:
                     zone.error = f"{entity}: target not confirmed; demand retained"
                     return
                 self.potential[entity] = desired
+            issued = dt_util.utcnow().isoformat()
+            issued_clock = self.clock()
             await self.hass.services.async_call(
                 "climate",
                 "set_hvac_mode",
@@ -192,7 +244,20 @@ class Manager:
             )
         except (HomeAssistantError, TimeoutError, ValueError) as err:
             zone.error = f"{entity}: {err}; demand retained"
+            if entity in zone.config["coolers"]:
+                if issued:
+                    self.cooling_outcome(
+                        zone, entity, desired, issued, issued_clock, "error"
+                    )
+                else:
+                    zone.response.invalidate(
+                        "Cooling setpoint service error; no mode command issued"
+                    )
             return
+        if entity in zone.config["coolers"]:
+            self.cooling_outcome(
+                zone, entity, desired, issued, issued_clock, "delivered"
+            )
         state = self.hass.states.get(entity)
         if (
             state
@@ -202,6 +267,19 @@ class Manager:
             self.record_transition(entity, desired)
         else:
             zone.error = f"{entity}: mode not confirmed; demand retained"
+
+    def cooling_outcome(self, zone, entity, desired, issued, issued_clock, outcome):
+        action = "stop" if desired == "off" else "start"
+        zone.cooling_commands.append(
+            {
+                "entity_id": entity,
+                "action": action,
+                "issued_at": issued,
+                "outcome": outcome,
+            }
+        )
+        del zone.cooling_commands[:-20]
+        zone.response.command(action, issued_clock, delivered=outcome == "delivered")
 
     async def tick(self):
         async with self.lock:
@@ -304,6 +382,11 @@ class Manager:
                             await self.command(
                                 zone, entity, desired, c[f"{kind}_demand"], force=force
                             )
+                if "heat" in self.house_directions() or zone.requested == "heat":
+                    zone.response.invalidate(
+                        "Heating contamination; cooling inference invalid"
+                    )
+                zone.response.advance(self.clock())
                 for listener in list(zone.listeners):
                     listener()
                 if zone.callback:

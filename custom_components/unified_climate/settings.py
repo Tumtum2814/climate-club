@@ -22,6 +22,15 @@ DEFAULTS = {
     "stale_after": 900,
     "heat_demand": 75.0,
     "cool_demand": 65.0,
+    "response_enabled": False,
+    "response_sensors": [],
+    "response_start_grace": 180,
+    "response_stop_settling": 180,
+    "response_baseline_window": 600,
+    "response_start_window": 600,
+    "response_stop_window": 600,
+    "response_min_samples": 3,
+    "response_threshold": 0.03,
 }
 
 
@@ -30,6 +39,34 @@ def validate(data, other_actuators=(), virtual_entities=()):
     import re
 
     config = {**DEFAULTS, **data}
+    if type(config["response_enabled"]) is not bool:
+        raise ValueError("response_enabled must be boolean")
+    feedback = config["response_sensors"]
+    if not isinstance(feedback, list) or any(
+        not isinstance(e, str) or not re.fullmatch(r"sensor\.[a-z0-9_]+", e)
+        for e in feedback
+    ):
+        raise ValueError("Invalid response sensors")
+    config["response_sensors"] = list(dict.fromkeys(feedback))
+    for key, low, high in (
+        ("response_start_grace", 0, 3600),
+        ("response_stop_settling", 0, 3600),
+        ("response_baseline_window", 60, 7200),
+        ("response_start_window", 60, 7200),
+        ("response_stop_window", 60, 7200),
+        ("response_min_samples", 2, 100),
+        ("response_threshold", 0.001, 2),
+    ):
+        value = config[key]
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            or not low <= value <= high
+        ):
+            raise ValueError(f"Invalid {key}")
+        if key == "response_min_samples" and not float(value).is_integer():
+            raise ValueError("Sample count must be integral")
     actuators = config["heaters"] + config["coolers"]
     if not config["sensors"] or not actuators or not str(config["name"]).strip():
         raise ValueError("Select temperature sensors and at least one actuator")

@@ -14,7 +14,13 @@ async def async_setup_entry(hass, entry, async_add_entities):
     async_add_entities(
         [
             ZoneSensor(manager, entry.entry_id, kind)
-            for kind in ("indoor", "outdoor", "operation")
+            for kind in (
+                "indoor",
+                "outdoor",
+                "operation",
+                "response",
+                "inferred_operation",
+            )
         ]
     )
 
@@ -57,9 +63,11 @@ class ZoneSensor(SensorEntity):
                 "indoor": "Indoor temperature",
                 "outdoor": "Outdoor temperature",
                 "operation": "Operation",
+                "response": "Cooling response",
+                "inferred_operation": "Inferred cooling operation",
             }[kind]
         )
-        if kind != "operation":
+        if kind in ("indoor", "outdoor"):
             self._attr_device_class = SensorDeviceClass.TEMPERATURE
             self._attr_native_unit_of_measurement = "°F"
             self._attr_state_class = SensorStateClass.MEASUREMENT
@@ -79,4 +87,17 @@ class ZoneSensor(SensorEntity):
             return self.zone.temperature
         if self.kind == "outdoor":
             return self.zone.outdoor
+        if self.kind in ("response", "inferred_operation"):
+            return self.zone.response.state
         return operation(self.hass, self.zone.config)
+
+    @property
+    def extra_state_attributes(self):
+        return (
+            {
+                **self.zone.response.diagnostics,
+                "cooling_commands": list(self.zone.cooling_commands),
+            }
+            if self.kind == "response"
+            else None
+        )
