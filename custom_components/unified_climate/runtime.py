@@ -306,22 +306,29 @@ class Manager:
                     if c["outdoor_sensor"]
                     else None
                 )
-                zone.outdoor = (
-                    aggregate(
+                zone.outdoor = None
+                if outside and outside.state not in ("unknown", "unavailable"):
+                    if outside.domain == "weather":
+                        value = outside.attributes.get("temperature")
+                        unit = outside.attributes.get("temperature_unit")
+                    elif outside.domain == "climate":
+                        value = outside.attributes.get("current_temperature")
+                        unit = outside.attributes.get("temperature_unit")
+                    else:
+                        value = outside.state
+                        unit = outside.attributes.get("unit_of_measurement")
+                    zone.outdoor = aggregate(
                         [
                             (
-                                outside.state,
-                                outside.attributes.get("unit_of_measurement"),
+                                value,
+                                unit,
                                 (
-                                    dt_util.utcnow() - outside.last_updated
+                                    dt_util.utcnow() - outside.last_reported
                                 ).total_seconds(),
                             )
                         ],
-                        max_age=c["stale_after"],
+                        max_age=c["outdoor_stale_after"],
                     )
-                    if outside
-                    else None
-                )
                 zone.requested = demand(
                     zone.mode,
                     zone.temperature,

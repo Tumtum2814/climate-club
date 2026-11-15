@@ -1,5 +1,20 @@
 # Executed verification and boundaries
 
+## 0.2.1 outdoor weather-source fix — current evidence
+
+Root cause reproduced through real HA config flow: the outdoor EntitySelector filtered to `sensor` only, validation rejected `weather.*`, and runtime tried to parse the condition state (`cloudy`/`sunny`) instead of the weather entity's `temperature`/`temperature_unit` attributes. The indoor 900-second stale limit and card's 30-minute gap cutoff also did not suit hourly outdoor weather updates.
+
+Successive observed RED → GREEN checks:
+- `test_outdoor_picker_accepts_weather_and_hub_temperature_sources`: failed because selector domains were only `sensor`; now setup and Configure accept sensor/weather/climate sources and retain options across reload.
+- `test_outdoor_source_temperature_reaches_history_and_updates`: weather and climate cases returned None instead of 50°F; now four source cases pass through actual HA flows, state listeners and numeric history sensors, including °C conversion, attribute-only weather changes, unavailable-source gaps and unchanged indoor control temperature.
+- `test_weather_freshness_is_separate_from_indoor_safety_timeout`: one-hour weather report incorrectly returned None; now separate configurable outdoor freshness (default 10800s) expires four-hour reports and accepts a fresh unchanged report without relaxing indoor limits.
+- `test_outdoor_age_limit_is_validated`: five invalid settings were accepted; now all are rejected.
+- Node `hourly outdoor history renders without bridging missing weather or indoor gaps`: hourly weather produced zero paths; now a separate outdoor gap setting renders it, preserves explicit missing-data/indoor gaps and respects a narrower override.
+
+Final local execution: **72 Python tests passed** (the same 5 upstream deprecation warnings), **6 Node tests passed**, Ruff lint/format, Prettier and `git diff --check` passed. Python command: `/Users/tom/.hermes/cache/scratch/unified-climate-venv/bin/python -m pytest tests -q --timeout=20 --basetemp=/Users/tom/.hermes/cache/scratch/climate-weather-pytest`; frontend: `node --test tests/*.test.js`. One import-order lint issue was corrected before the final lint gate. Version 0.2.1 ZIP rebuilt and CRC/manifest checked.
+
+Tests run against the existing isolated HA 2026.11.1 runtime and synthetic source states, not the user's hub or a live NWS API. No live equipment or HA configuration was changed. All sections below are historical evidence from earlier versions.
+
 > **Prior baseline:** Everything through the original “Explicit limitations” section below records the 0.1.0 implementation, not current 0.2.0 results. Its 35/3 test totals, browser screenshot and metadata limitation are historical. The repository metadata is now supplied for `https://github.com/Tumtum2814/climate-club`; no publication action was performed for this change. Current executed monitoring evidence is appended under **0.2.0 temperature-response monitoring**.
 
 ## Environment / commands

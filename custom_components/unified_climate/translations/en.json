@@ -11,7 +11,8 @@
           "heaters": "Physical heating thermostats",
           "coolers": "AC climate controllers",
           "trusted_action_entities": "Verified HVAC-action reporters (leave empty for unverified IR)",
-          "outdoor_sensor": "Outdoor temperature sensor (optional, history only)",
+          "outdoor_sensor": "Outdoor temperature source (sensor, weather, or thermostat)",
+          "outdoor_stale_after": "Maximum outdoor report age (seconds)",
           "aggregation": "Indoor sensor aggregation",
           "hysteresis": "Hysteresis (°F)",
           "stop_early": "Hot-water stop-early offset (°F)",
@@ -39,7 +40,7 @@
         },
         "data_description": {
           "trusted_action_entities": "Select only mapped actuators whose hvac_action you independently verified is actual equipment feedback. IR mode/state is not compressor verification. Every mapped actuator must be trusted for known operation history.",
-          "outdoor_sensor": "Optional history trace only; indoor control does not depend on outdoor temperature."
+          "outdoor_sensor": "Choose a temperature sensor, a weather entity such as NWS/Home, or a thermostat current temperature. Weather temperature attributes are read automatically. History only; indoor control is unchanged."
         }
       }
     },
@@ -58,7 +59,8 @@
           "heaters": "Physical heating thermostats",
           "coolers": "AC climate controllers",
           "trusted_action_entities": "Verified HVAC-action reporters (leave empty for unverified IR)",
-          "outdoor_sensor": "Outdoor temperature sensor (optional, history only)",
+          "outdoor_sensor": "Outdoor temperature source (sensor, weather, or thermostat)",
+          "outdoor_stale_after": "Maximum outdoor report age (seconds)",
           "aggregation": "Indoor sensor aggregation",
           "hysteresis": "Hysteresis (°F)",
           "stop_early": "Hot-water stop-early offset (°F)",
@@ -86,7 +88,7 @@
         },
         "data_description": {
           "trusted_action_entities": "Select only mapped actuators whose hvac_action you independently verified is actual equipment feedback. IR mode/state is not compressor verification. Every mapped actuator must be trusted for known operation history.",
-          "outdoor_sensor": "Optional history trace only; indoor control does not depend on outdoor temperature."
+          "outdoor_sensor": "Choose a temperature sensor, a weather entity such as NWS/Home, or a thermostat current temperature. Weather temperature attributes are read automatically. History only; indoor control is unchanged."
         }
       }
     },

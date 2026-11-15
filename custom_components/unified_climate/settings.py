@@ -7,6 +7,7 @@ DEFAULTS = {
     "coolers": [],
     "trusted_action_entities": [],
     "outdoor_sensor": "",
+    "outdoor_stale_after": 10800,
     "aggregation": "median",
     "hysteresis": 0.3,
     "stop_early": 0.3,
@@ -83,7 +84,7 @@ def validate(data, other_actuators=(), virtual_entities=()):
     if not set(config["trusted_action_entities"]).issubset(actuators):
         raise ValueError("Trusted action sources must be mapped actuators")
     if config["outdoor_sensor"] and not re.fullmatch(
-        r"sensor\.[a-z0-9_]+", config["outdoor_sensor"]
+        r"(?:sensor|weather|climate)\.[a-z0-9_]+", config["outdoor_sensor"]
     ):
         raise ValueError("Invalid outdoor sensor")
     if config["aggregation"] not in ("mean", "median"):
@@ -97,6 +98,7 @@ def validate(data, other_actuators=(), virtual_entities=()):
         "heat_demand": (50, 80),
         "cool_demand": (60, 85),
         "stale_after": (60, 86400),
+        "outdoor_stale_after": (60, 86400),
         "startup_delay": (60, 3600),
         "changeover_delay": (60, 3600),
         "heat_min_on": (30, 3600),

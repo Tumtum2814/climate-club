@@ -133,3 +133,57 @@ test("card loads authenticated native history, plots colors/outside and controls
   ]);
   card.remove();
 });
+
+// Weather services commonly publish hourly; indoor gaps must stay conservative.
+test("hourly outdoor history renders without bridging missing weather or indoor gaps", async () => {
+  const card = document.createElement("unified-climate-card");
+  card.setConfig({ entity: "climate.zone", hours: 3 });
+  const start = Date.now() - 3 * 3600000;
+  const rows = (id, data) =>
+    data.map(([minute, state]) => ({
+      entity_id: id,
+      last_changed: new Date(start + minute * 60000).toISOString(),
+      state: String(state),
+      attributes: { unit_of_measurement: "°F" },
+    }));
+  card.hass = {
+    states: {
+      "climate.zone": {
+        state: "off",
+        attributes: {
+          history_sensors: {
+            indoor: "sensor.indoor",
+            outdoor: "sensor.outdoor",
+            operation: "sensor.op",
+          },
+        },
+      },
+    },
+    callApi: async () => [
+      rows("sensor.indoor", [
+        [0, 68],
+        [60, 69],
+      ]),
+      rows("sensor.outdoor", [
+        [0, 50],
+        [60, 52],
+        [70, "unavailable"],
+        [120, 54],
+      ]),
+      rows("sensor.op", [[0, "unknown"]]),
+    ],
+    callService: async () => {
+      throw new Error("Rendering must not control equipment");
+    },
+  };
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(card.shadowRoot.querySelectorAll("[data-outdoor]").length, 1);
+  assert.equal(card.shadowRoot.querySelectorAll("[data-action]").length, 0);
+  card.setConfig({
+    entity: "climate.zone",
+    hours: 3,
+    outdoor_max_gap_minutes: 30,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(card.shadowRoot.querySelectorAll("[data-outdoor]").length, 0);
+});

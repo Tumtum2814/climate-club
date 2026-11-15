@@ -194,7 +194,11 @@ export class UnifiedClimateCard extends (globalThis.HTMLElement || class {}) {
     const maxGap = (Number(this.config.max_gap_minutes) || 30) * 60000;
     const inferred = this.history[this.sensors?.inferred_operation] || [];
     const lines = segments(indoor, actions, maxGap, inferred),
-      outLines = segments(outside, [], maxGap);
+      outLines = segments(
+        outside,
+        [],
+        (Number(this.config.outdoor_max_gap_minutes) || 180) * 60000,
+      );
     const values = [...lines, ...outLines].flatMap((l) =>
       l.points.map((p) => p[1]),
     );

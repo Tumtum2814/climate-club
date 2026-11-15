@@ -31,7 +31,7 @@ def schema(values):
         "outdoor_sensor", description={"suggested_value": values["outdoor_sensor"]}
     )
     fields[outdoor] = selector.EntitySelector(
-        selector.EntitySelectorConfig(domain="sensor")
+        selector.EntitySelectorConfig(domain=["sensor", "weather", "climate"])
     )
     fields[vol.Required("aggregation", default=values["aggregation"])] = (
         selector.SelectSelector(

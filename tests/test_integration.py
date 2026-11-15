@@ -306,3 +306,135 @@ async def test_options_reject_reuse_and_reload_new_mapping_off(ha):
     await ha.async_block_till_done()
     entity = ha.states.async_all("climate")[0]
     assert entity.attributes["current_temperature"] == 20
+
+
+async def test_outdoor_picker_accepts_weather_and_hub_temperature_sources(ha):
+    from custom_components.unified_climate import DOMAIN
+
+    flow = await ha.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+    picker = next(
+        value
+        for key, value in flow["data_schema"].schema.items()
+        if str(key) == "outdoor_sensor"
+    )
+    assert set(picker.config["domain"]) == {"sensor", "weather", "climate"}
+    assert picker("weather.nws") == "weather.nws"
+    assert picker("sensor.hub_outdoor_temperature") == "sensor.hub_outdoor_temperature"
+    assert picker("climate.hub") == "climate.hub"
+    result = await ha.config_entries.flow.async_configure(
+        flow["flow_id"],
+        {
+            "sensors": ["sensor.room"],
+            "heaters": ["climate.heat"],
+            "outdoor_sensor": "weather.nws",
+        },
+    )
+    assert result["type"] == "create_entry"
+    await ha.async_block_till_done()
+    assert (
+        ha.data[DOMAIN].zones[result["result"].entry_id].config["outdoor_sensor"]
+        == "weather.nws"
+    )
+    entry = result["result"]
+    options = await ha.config_entries.options.async_init(entry.entry_id)
+    options_picker = next(
+        value
+        for key, value in options["data_schema"].schema.items()
+        if str(key) == "outdoor_sensor"
+    )
+    assert set(options_picker.config["domain"]) == {"sensor", "weather", "climate"}
+    saved = await ha.config_entries.options.async_configure(
+        options["flow_id"], {"outdoor_sensor": "weather.home"}
+    )
+    assert saved["type"] == "create_entry"
+    await ha.async_block_till_done()
+    assert (
+        ha.data[DOMAIN].zones[entry.entry_id].config["outdoor_sensor"] == "weather.home"
+    )
+
+
+@pytest.mark.parametrize(
+    "source,state,attributes",
+    [
+        ("weather.nws", "cloudy", {"temperature": 10, "temperature_unit": "°C"}),
+        ("weather.home", "sunny", {"temperature": 50, "temperature_unit": "°F"}),
+        ("climate.hub", "off", {"current_temperature": 10, "temperature_unit": "°C"}),
+        ("sensor.hub_outdoor_temperature", "50", {"unit_of_measurement": "°F"}),
+    ],
+)
+async def test_outdoor_source_temperature_reaches_history_and_updates(
+    ha, source, state, attributes
+):
+    from custom_components.unified_climate import DOMAIN
+
+    ha.states.async_set("sensor.room", "68", {"unit_of_measurement": "°F"})
+    ha.states.async_set(source, state, attributes)
+    flow = await ha.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+    result = await ha.config_entries.flow.async_configure(
+        flow["flow_id"],
+        {
+            "name": "Weather",
+            "sensors": ["sensor.room"],
+            "heaters": ["climate.heat"],
+            "outdoor_sensor": source,
+        },
+    )
+    assert result["type"] == "create_entry"
+    await ha.async_block_till_done()
+    zone = ha.data[DOMAIN].zones[result["result"].entry_id]
+    assert zone.outdoor == 50
+    climate = ha.states.async_all("climate")[-1]
+    outdoor_id = climate.attributes["history_sensors"]["outdoor"]
+    assert float(ha.states.get(outdoor_id).state) == 10  # HA display is Celsius.
+    assert zone.temperature == 68  # Outdoor source never affects indoor control.
+    if source.startswith("weather."):
+        ha.states.async_set(
+            source, state, {"temperature": 60, "temperature_unit": "°F"}
+        )
+        await ha.async_block_till_done()
+        assert zone.outdoor == 60  # Attribute-only weather update must propagate.
+    ha.states.async_set(source, "unavailable", attributes)
+    await ha.async_block_till_done()
+    assert zone.outdoor is None
+    assert ha.states.get(outdoor_id).state == "unknown"
+
+
+async def test_weather_freshness_is_separate_from_indoor_safety_timeout(ha):
+    from datetime import timedelta
+
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.unified_climate import DOMAIN
+
+    ha.states.async_set("sensor.room", "68", {"unit_of_measurement": "°F"})
+    ha.states.async_set(
+        "weather.nws", "cloudy", {"temperature": 50, "temperature_unit": "°F"}
+    )
+    flow = await ha.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+    result = await ha.config_entries.flow.async_configure(
+        flow["flow_id"],
+        {
+            "sensors": ["sensor.room"],
+            "heaters": ["climate.heat"],
+            "outdoor_sensor": "weather.nws",
+        },
+    )
+    await ha.async_block_till_done()
+    manager = ha.data[DOMAIN]
+    zone = manager.zones[result["result"].entry_id]
+    source = ha.states.get("weather.nws")
+    source.last_updated = dt_util.utcnow() - timedelta(hours=1)
+    source.last_reported = source.last_updated
+    await manager.tick()
+    assert (
+        zone.outdoor == 50
+    )  # Hourly provider still valid; indoor max age is 15 minutes.
+    assert zone.config["stale_after"] == 900
+    assert zone.config["outdoor_stale_after"] == 10800
+    source.last_reported = dt_util.utcnow() - timedelta(hours=4)
+    await manager.tick()
+    assert zone.outdoor is None
+    # A fresh report with unchanged weather values should become usable again.
+    source.last_reported = dt_util.utcnow()
+    await manager.tick()
+    assert zone.outdoor == 50

@@ -27,3 +27,9 @@ def test_rejects_unsafe_config(change, others, virtual):
 
 def test_valid_mapping_has_cautious_defaults():
     assert validate(BASE)["startup_delay"] == 300
+
+
+@pytest.mark.parametrize("age", [0, -1, 86401, float("nan"), float("inf")])
+def test_outdoor_age_limit_is_validated(age):
+    with pytest.raises(ValueError):
+        validate({**BASE, "outdoor_stale_after": age})
