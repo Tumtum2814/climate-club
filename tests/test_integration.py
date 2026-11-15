@@ -438,3 +438,96 @@ async def test_weather_freshness_is_separate_from_indoor_safety_timeout(ha):
     source.last_reported = dt_util.utcnow()
     await manager.tick()
     assert zone.outdoor == 50
+
+
+@pytest.mark.parametrize(
+    "mode,target,expected_low,expected_high",
+    [
+        ("heat", 74, 74, 76),
+        ("cool", 66, 64, 66),
+    ],
+)
+@pytest.mark.parametrize("metric", [False, True])
+async def test_single_mode_setpoint_moves_hidden_target_and_uses_requested_mode(
+    ha, mode, target, expected_low, expected_high, metric
+):
+    from homeassistant.util.unit_system import METRIC_SYSTEM, US_CUSTOMARY_SYSTEM
+
+    from custom_components.unified_climate import DOMAIN
+
+    ha.config.units = METRIC_SYSTEM if metric else US_CUSTOMARY_SYSTEM
+    flow = await ha.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+    result = await ha.config_entries.flow.async_configure(
+        flow["flow_id"],
+        {
+            "sensors": ["sensor.room"],
+            "heaters": ["climate.heat"],
+            "coolers": ["climate.ac"],
+        },
+    )
+    await ha.async_block_till_done()
+    entity = ha.states.async_all("climate")[0]
+    await ha.services.async_call(
+        "climate",
+        "set_temperature",
+        {
+            "entity_id": entity.entity_id,
+            "hvac_mode": mode,
+            "temperature": (target - 32) / 1.8 if metric else target,
+        },
+        blocking=True,
+    )
+    zone = ha.data[DOMAIN].zones[result["result"].entry_id]
+    assert zone.mode == mode
+    assert zone.config["heat_target"] == pytest.approx(expected_low)
+    assert zone.config["cool_target"] == pytest.approx(expected_high)
+
+
+async def test_explicit_band_validation_is_actionable_and_atomic(ha):
+    from homeassistant.exceptions import ServiceValidationError
+    from homeassistant.util.unit_system import US_CUSTOMARY_SYSTEM
+
+    from custom_components.unified_climate import DOMAIN
+
+    ha.config.units = US_CUSTOMARY_SYSTEM
+    flow = await ha.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+    result = await ha.config_entries.flow.async_configure(
+        flow["flow_id"],
+        {
+            "sensors": ["sensor.room"],
+            "heaters": ["climate.heat"],
+            "coolers": ["climate.ac"],
+            "min_band": 3,
+        },
+    )
+    await ha.async_block_till_done()
+    zone = ha.data[DOMAIN].zones[result["result"].entry_id]
+    entity = ha.states.async_all("climate")[0]
+    assert entity.attributes.get("min_band_f") == 3
+    before = dict(zone.config)
+    with pytest.raises(ServiceValidationError, match="at least 3°F"):
+        await ha.services.async_call(
+            "climate",
+            "set_temperature",
+            {
+                "entity_id": entity.entity_id,
+                "target_temp_low": 73,
+                "target_temp_high": 75,
+                "hvac_mode": "heat_cool",
+            },
+            blocking=True,
+        )
+    assert zone.config == before
+    assert zone.mode == "off" and not zone.owned
+    with pytest.raises(ServiceValidationError, match="range"):
+        await ha.services.async_call(
+            "climate",
+            "set_temperature",
+            {
+                "entity_id": entity.entity_id,
+                "temperature": 72,
+                "hvac_mode": "heat_cool",
+            },
+            blocking=True,
+        )
+    assert zone.config == before

@@ -6,6 +6,7 @@ from homeassistant.components.climate import (
     HVACMode,
 )
 from homeassistant.const import UnitOfTemperature
+from homeassistant.exceptions import ServiceValidationError
 
 from . import DOMAIN
 from .settings import validate
@@ -92,6 +93,9 @@ class UnifiedClimate(ClimateEntity):
             },
             "cooling_response": self.zone.response.diagnostics,
             "cooling_commands": list(self.zone.cooling_commands),
+            "min_band_f": self.zone.config["min_band"]
+            if self.zone.config["heaters"] and self.zone.config["coolers"]
+            else 0,
             "requested_action": self.zone.requested,
             "owns_equipment": self.zone.owned,
             "control_error": self.zone.error,
@@ -110,16 +114,43 @@ class UnifiedClimate(ClimateEntity):
         self.async_write_ha_state()
 
     async def async_set_temperature(self, **kwargs):
+        mode = kwargs.get("hvac_mode", self.zone.mode)
+        if mode not in self.hvac_modes:
+            raise ServiceValidationError("Unsupported mode")
+        if "temperature" in kwargs and (
+            mode == "heat_cool"
+            or "target_temp_low" in kwargs
+            or "target_temp_high" in kwargs
+        ):
+            raise ServiceValidationError(
+                "Use a heat/cool target range instead of a single temperature in Heat/cool mode; do not mix single and range targets."
+            )
         update = {}
         if "temperature" in kwargs:
-            update["cool_target" if self.zone.mode == "cool" else "heat_target"] = (
-                kwargs["temperature"]
+            target = float(kwargs["temperature"])
+            cooling = mode == "cool" or (
+                mode == "off" and not self.zone.config["heaters"]
             )
+            update["cool_target" if cooling else "heat_target"] = target
+            if self.zone.config["heaters"] and self.zone.config["coolers"]:
+                band = self.zone.config["min_band"]
+                if cooling:
+                    update["heat_target"] = min(
+                        self.zone.config["heat_target"], target - band
+                    )
+                else:
+                    update["cool_target"] = max(
+                        self.zone.config["cool_target"], target + band
+                    )
         if "target_temp_low" in kwargs:
             update["heat_target"] = kwargs["target_temp_low"]
         if "target_temp_high" in kwargs:
             update["cool_target"] = kwargs["target_temp_high"]
-        self.zone.config = validate({**self.zone.config, **update})
+        try:
+            config = validate({**self.zone.config, **update})
+        except (ValueError, TypeError) as err:
+            raise ServiceValidationError(str(err)) from err
+        self.zone.config = config
         if "hvac_mode" in kwargs:
             await self.manager.set_mode(self.key, kwargs["hvac_mode"])
         else:

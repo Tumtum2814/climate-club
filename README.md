@@ -1,4 +1,4 @@
-# Unified Climate 0.2.1
+# Unified Climate 0.2.2
 
 A Home Assistant custom integration that combines existing temperature sensors, hot-water zone thermostats (for example Ecobee), and AC climate entities (for example Sensibo) into one virtual thermostat per **physically controllable zone**. Includes a dependency-free thermostat/history dashboard card.
 
@@ -49,6 +49,17 @@ The integration menu's **Configure** form changes mappings and numeric settings.
 
 Heating starts below `heat_target - stop_early - hysteresis`, holds until `heat_target - stop_early`; cooling starts above `cool_target + hysteresis`, holds until `cool_target - hysteresis`. Timers may defer normal transitions; safety Off overrides minimum-on. Sensor aggregation excludes invalid, nonfinite, unsupported-unit and stale values. One remaining valid sensor is enough; with no valid sensors all owned actuators are requested off. Outdoor temperature is history-only, never a control input.
 
+## Setting heat and cool targets (0.2.2)
+
+The heat/cool target gap is **not hysteresis**. In a zone with both heating and cooling, `min_band` keeps the cooling target above the heating target (default 2°F) to avoid heat/cool changeover churn.
+
+- In **Heat**, a single temperature updates the heat target. If needed, the inactive cool target moves upward just enough to preserve the configured gap. **Cool** does the inverse. The explicitly requested temperature is not clamped; if preserving the gap would exceed the 50–85°F configuration bounds, the request is rejected without changing the zone.
+- A combined service call specifying `hvac_mode` plus `temperature` uses the **requested** mode, not the previous mode. With no mode argument, the current mode is used. While Off, a cooling-only zone edits its cool target; other zones' single-temperature calls edit heat. Such an Off edit does not enable equipment.
+- **Heat/cool** requires `target_temp_low` / `target_temp_high`, not an ambiguous single temperature. Explicit range changes preserve the submitted values and reject an insufficient gap with the required size and actual values. Unsupported/mixed single-and-range requests are rejected before changing targets or acquiring equipment.
+- Heating-only and cooling-only zones do not enforce a gap against an unused target. Existing combined-zone safety, setpoint bounds, timing and interlocks remain enforced. Tiny floating-point conversion errors at a valid gap boundary are tolerated, not real undersized gaps.
+
+The bundled card shows only the active target in Heat or Cool and only the supported target for single-direction zones. It shows both fields in Heat/cool (and while Off for a combined zone) and validates the configured gap locally before sending a range. Temperature controls remain Fahrenheit even when HA's display units are Celsius. Update its resource URL to `?v=0.2.2` after upgrading. Native HA thermostat cards/automations use the same backend validation.
+
 ## Outdoor temperature source (0.2.1)
 
 The optional **Outdoor temperature source** selector accepts:
@@ -60,7 +71,7 @@ Both °C and °F are converted into the existing numeric outdoor history sensor.
 
 Weather providers can report hourly, so outdoor freshness is independent of indoor/control freshness. `outdoor_stale_after` defaults to 3 hours and checks the source's last HA report, including unchanged reports; it does not establish the provider observation's true age. Adjust it to your source. This remains graph-only and never changes heating/cooling demand.
 
-The card separately permits outdoor intervals up to `outdoor_max_gap_minutes` (default 180), while indoor `max_gap_minutes` remains 30. Unknown/unavailable samples always break either line. The outdoor line interpolates between available observations, not between measured continuous temperatures; it does not extend the last value into the future. For local outdoor sensors, you may lower `outdoor_max_gap_minutes` to 30. Update the dashboard resource URL to `?v=0.2.1` after upgrading.
+The card separately permits outdoor intervals up to `outdoor_max_gap_minutes` (default 180), while indoor `max_gap_minutes` remains 30. Unknown/unavailable samples always break either line. The outdoor line interpolates between available observations, not between measured continuous temperatures; it does not extend the last value into the future. For local outdoor sensors, you may lower `outdoor_max_gap_minutes` to 30. Update the dashboard resource URL to `?v=0.2.2` after upgrading.
 
 ## Advisory cooling temperature-response monitoring (0.2.0)
 
@@ -92,7 +103,7 @@ Missing/invalid/stale feedback, unit changes and heating contamination invalidat
 
 Each zone adds **Cooling response** (`response`) and **Inferred cooling operation** (`inferred_operation`) sensors without replacing the existing trusted **Operation** sensor. Stable states are `disabled`, `observing_start`, `observing_stop`, `cooling_likely`, `stopped_likely`, `inconclusive`, `no_start_response`, and `continued_cooling`. The response sensor and climate `cooling_response` attributes expose reason, per-sensor baseline/post counts, slopes, report freshness, window sizes and thresholds; the climate/response sensor also exposes the bounded command audit. Counts update during observation; conclusions wait for the full window. Monotonic timing attributes are process-local diagnostics, not wall-clock timestamps; the command audit has UTC timestamps.
 
-Do not exclude the new sensors from Recorder if you want detailed history. Their string states are recorded timeline events, not numeric long-term statistics. The card discovers `history_sensors.inferred_operation` and fetches it with the existing authenticated `hass.callApi` history request. For manual mappings, add `sensors.inferred_operation: sensor.your_zone_inferred_cooling_operation`. Older entries/history mappings without this sensor still render normally. Keep the resource URL cache reference at **`?v=0.2.1`** after upgrading.
+Do not exclude the new sensors from Recorder if you want detailed history. Their string states are recorded timeline events, not numeric long-term statistics. The card discovers `history_sensors.inferred_operation` and fetches it with the existing authenticated `hass.callApi` history request. For manual mappings, add `sensors.inferred_operation: sensor.your_zone_inferred_cooling_operation`. Older entries/history mappings without this sensor still render normally. Keep the resource URL cache reference at **`?v=0.2.2`** after upgrading.
 
 Trusted reported actions remain solid red/blue/gray and take priority over inference. Inferred cooling is dashed blue; inferred stopped/idle is dashed neutral gray; observing/error/uncertain/disabled intervals without trusted feedback are dashed purple. The legend explicitly says **inferred**. Requested demand is never counted as inferred operation. Existing temperature gaps and outdoor dashed gold remain intact.
 
@@ -106,7 +117,7 @@ Enable HA Recorder and History and do not exclude these sensors. Long-term numer
 
 With HA HTTP enabled, the integration serves its bundled JS. Add **Settings → Dashboards → Resources → Add resource** (advanced mode):
 
-- URL: `/unified_climate/unified-climate-card.js?v=0.2.1`
+- URL: `/unified_climate/unified-climate-card.js?v=0.2.2`
 - Type: **JavaScript module**
 
 Then add a Manual dashboard card:
@@ -129,7 +140,7 @@ sensors:
 
 HA history is fetched through the frontend's authenticated `hass.callApi` connection (`GET /api/history/period/...`); no token entry or CDN is used. Chart history refreshes at most once a minute; range selector supports 1–72 hours. Modes and target controls call HA climate services only after user interaction. Control errors and absent history are displayed rather than replaced with demo data.
 
-If the integration static route is unavailable, copy `frontend/unified-climate-card.js` from the installed component to `<HA configuration>/www/unified-climate-card.js` and register `/local/unified-climate-card.js?v=0.2.1` instead. HACS **integration** installation does not automatically register Lovelace resources; that step is always separate. There is no visual card editor in v1.
+If the integration static route is unavailable, copy `frontend/unified-climate-card.js` from the installed component to `<HA configuration>/www/unified-climate-card.js` and register `/local/unified-climate-card.js?v=0.2.2` instead. HACS **integration** installation does not automatically register Lovelace resources; that step is always separate. There is no visual card editor in v1.
 
 ## HACS custom-repository installation
 

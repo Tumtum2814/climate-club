@@ -1,5 +1,19 @@
 # Executed verification and boundaries
 
+## 0.2.2 setpoint-band fix — current evidence
+
+Reproduced the reported exception through real HA `climate.set_temperature` services: Heat 74°F was rejected against the hidden Cool 75°F/default 2°F band. A combined Cool-mode/66°F service request incorrectly edited Heat because dispatch used the old Off mode. Heat-only/cool-only zones also enforced an unused opposing threshold. A valid decimal band failed because binary subtraction fell infinitesimally below the minimum.
+
+Observed successive RED → GREEN tests:
+- `test_single_mode_setpoint_moves_hidden_target_and_uses_requested_mode`: four US/metric Heat/Cool cases failed (exception or wrong target); now all pass using requested mode and shifting only an inactive target as needed to preserve the gap.
+- `test_single_direction_zone_has_no_unused_target_band` and `test_valid_decimal_band_is_not_rejected_by_float_rounding`: three failures reproduced; now pass. The existing equal-target rejection case now explicitly configures both actuators, so combined-zone protection is still tested.
+- `test_explicit_band_validation_is_actionable_and_atomic`: missing minimum-band metadata reproduced; after implementation real service requests reject invalid ranges with `ServiceValidationError`, required gap/value detail and unchanged targets/mode/ownership. Ambiguous single temperatures in Heat/cool are rejected before mutation.
+- `tests/setpoint-card.test.js`: explicit undersized range originally reached the service; local configured-gap validation now blocks it with a helpful message. Four mode/equipment cases originally exposed two inputs; they now show one appropriate field and send only a single temperature, including Celsius service-unit conversion.
+
+Executed locally: **80 Python tests passed** (5 existing upstream warnings), **11 Node tests passed**. Commands: `/Users/tom/.hermes/cache/scratch/unified-climate-venv/bin/python -m pytest tests -q --timeout=20 --basetemp=/Users/tom/.hermes/cache/scratch/climate-band-pytest` and `node --test tests/*.test.js`. Real HA remains 2026.11.1 with local service/state fixtures, not user equipment. Current card behavior is verified in jsdom, not a live dashboard session. No change to hardware safety, demand algorithm, hysteresis, cycle timers or global interlock. The card cache version is 0.2.2; update the registered resource after installing.
+
+All evidence below is historical.
+
 ## 0.2.1 outdoor weather-source fix — current evidence
 
 Root cause reproduced through real HA config flow: the outdoor EntitySelector filtered to `sensor` only, validation rejected `weather.*`, and runtime tried to parse the condition state (`cloudy`/`sunny`) instead of the weather entity's `temperature`/`temperature_unit` attributes. The indoor 900-second stale limit and card's 30-minute gap cutoff also did not suit hourly outdoor weather updates.

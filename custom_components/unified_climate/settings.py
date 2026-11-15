@@ -111,6 +111,15 @@ def validate(data, other_actuators=(), virtual_entities=()):
         if not math.isfinite(value) or not low <= value <= high:
             raise ValueError(f"{key} outside safe bounds")
         config[key] = value
-    if config["cool_target"] - config["heat_target"] < config["min_band"]:
-        raise ValueError("Heat/cool targets require a separate band")
+    gap = config["cool_target"] - config["heat_target"]
+    if (
+        config["heaters"]
+        and config["coolers"]
+        and gap < config["min_band"]
+        and not math.isclose(gap, config["min_band"], rel_tol=0, abs_tol=1e-6)
+    ):
+        raise ValueError(
+            f"Cool target must be at least {config['min_band']:g}°F above heat target "
+            f"(heat {config['heat_target']:g}°F, cool {config['cool_target']:g}°F)."
+        )
     return config
