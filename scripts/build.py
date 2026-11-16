@@ -33,6 +33,6 @@ if __name__ == "__main__":
     print(
         build(
             Path(__file__).resolve().parents[1],
-            Path(__file__).resolve().parents[1] / "dist/unified-climate.zip",
+            Path(__file__).resolve().parents[1] / "dist/climate-club.zip",
         )
     )

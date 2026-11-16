@@ -199,7 +199,8 @@ async def test_equipment_bounds_cannot_raise_heat_above_policy_limit(rig):
     assert zone.error is not None
 
 
-async def test_stale_sensor_forces_off_before_min_on(rig, monkeypatch):
+async def test_quiet_available_sensor_stays_fresh_and_keeps_heating(rig, monkeypatch):
+    """A push-on-change sensor that is silent for hours is still valid."""
     from datetime import timedelta
 
     from homeassistant.util import dt as dt_util
@@ -209,10 +210,69 @@ async def test_stale_sensor_forces_off_before_min_on(rig, monkeypatch):
     now[0] = 301
     await manager.tick()
     assert hass.states.get("climate.heat").state == "heat"
-    future = dt_util.utcnow() + timedelta(seconds=901)
+    future = dt_util.utcnow() + timedelta(hours=3)
     monkeypatch.setattr(dt_util, "utcnow", lambda: future)
     await manager.tick()
+    assert zone.temperature == 65
+    assert zone.requested == "heat"
+    assert hass.states.get("climate.heat").state == "heat"
+
+
+@pytest.mark.parametrize("lost", ["unavailable", "unknown"])
+async def test_unavailable_sensor_forces_off_before_min_on(rig, lost):
+    hass, manager, zone, calls, now = rig
+    await manager.set_mode("one", "heat")
+    now[0] = 301
+    await manager.tick()
+    assert hass.states.get("climate.heat").state == "heat"
+    hass.states.async_set("sensor.room", lost, {"unit_of_measurement": "°F"})
+    await manager.tick()
     assert zone.temperature is None
+    assert hass.states.get("climate.heat").state == "off"
+
+
+async def test_thermostat_without_target_while_off_gets_mode_before_setpoint(rig):
+    """ecobee via HomeKit reports no target until it is in Heat."""
+    hass, manager, zone, calls, now = rig
+    base = {
+        "temperature_unit": "°F",
+        "min_temp": 45,
+        "max_temp": 95,
+        "hvac_modes": ["off", "heat"],
+    }
+    held = {"target": None}
+
+    async def ecobee(call):
+        calls.append((call.service, dict(call.data)))
+        mode = call.data.get("hvac_mode", hass.states.get("climate.heat").state)
+        if "temperature" in call.data and mode != "off":
+            held["target"] = call.data["temperature"]
+        hass.states.async_set(
+            "climate.heat",
+            mode,
+            {**base, "temperature": held["target"] if mode != "off" else None},
+        )
+
+    for name in ("set_temperature", "set_hvac_mode"):
+        hass.services.async_register("climate", name, ecobee)
+    hass.states.async_set("climate.heat", "off", {**base, "temperature": None})
+    await manager.set_mode("one", "heat")
+    calls.clear()
+    now[0] = 301
+    await manager.tick()
+    assert [name for name, _ in calls] == ["set_hvac_mode", "set_temperature"]
+    state = hass.states.get("climate.heat")
+    assert state.state == "heat"
+    assert state.attributes["temperature"] == 75
+    assert zone.error is None
+    assert manager.transitions["climate.heat"][0] == "heat"
+    now[0] = 400
+    await manager.tick()
+    assert len(calls) == 2
+    # Stopping still works and leaves no target behind.
+    hass.states.async_set("sensor.room", "80", {"unit_of_measurement": "°F"})
+    now[0] = 700
+    await manager.tick()
     assert hass.states.get("climate.heat").state == "off"
 
 

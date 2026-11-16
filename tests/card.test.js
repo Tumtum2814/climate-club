@@ -187,3 +187,10 @@ test("hourly outdoor history renders without bridging missing weather or indoor 
   await new Promise((resolve) => setTimeout(resolve, 30));
   assert.equal(card.shadowRoot.querySelectorAll("[data-outdoor]").length, 0);
 });
+
+test("climate-club-card is registered alongside the original card type", () => {
+  const original = customElements.get("unified-climate-card");
+  const renamed = customElements.get("climate-club-card");
+  assert.ok(original && renamed);
+  assert.ok(document.createElement("climate-club-card") instanceof original);
+});

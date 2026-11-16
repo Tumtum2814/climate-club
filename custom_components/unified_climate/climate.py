@@ -14,10 +14,10 @@ from .settings import validate
 
 async def async_setup_entry(hass, entry, async_add_entities):
     manager = hass.data[DOMAIN]
-    async_add_entities([UnifiedClimate(manager, entry.entry_id)])
+    async_add_entities([ClimateClub(manager, entry.entry_id)])
 
 
-class UnifiedClimate(ClimateEntity):
+class ClimateClub(ClimateEntity):
     _attr_should_poll = False
     _attr_native_temperature_unit = UnitOfTemperature.FAHRENHEIT
     _attr_target_temperature_step = 0.1

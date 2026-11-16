@@ -1,4 +1,4 @@
-"""Unified Climate: one config entry and one climate entity per zone."""
+"""Climate Club: one config entry and one climate entity per zone."""
 
 from datetime import timedelta
 
@@ -41,7 +41,7 @@ async def async_setup_entry(hass, entry):
         if hasattr(event, "data") and "entity_id" in event.data:
             manager.feedback(zone, event)
         entry.async_create_background_task(
-            hass, manager.tick(), "Unified Climate reconcile"
+            hass, manager.tick(), "Climate Club reconcile"
         )
 
     entry.async_on_unload(
