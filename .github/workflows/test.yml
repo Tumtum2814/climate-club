@@ -23,5 +23,5 @@ jobs:
       - run: python scripts/build.py
       - uses: actions/upload-artifact@v4
         with:
-          name: unified-climate-source
-          path: dist/unified-climate.zip
+          name: climate-club-source
+          path: dist/climate-club.zip

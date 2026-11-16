@@ -292,3 +292,9 @@ export class UnifiedClimateCard extends (globalThis.HTMLElement || class {}) {
 }
 if (globalThis.customElements && !customElements.get("unified-climate-card"))
   customElements.define("unified-climate-card", UnifiedClimateCard);
+// Preferred card type; the original name above keeps existing dashboards working.
+if (globalThis.customElements && !customElements.get("climate-club-card"))
+  customElements.define(
+    "climate-club-card",
+    class extends UnifiedClimateCard {},
+  );

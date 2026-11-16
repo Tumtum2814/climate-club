@@ -1,4 +1,4 @@
-# Unified Climate 0.2.2
+# Climate Club 0.2.3
 
 A Home Assistant custom integration that combines existing temperature sensors, hot-water zone thermostats (for example Ecobee), and AC climate entities (for example Sensibo) into one virtual thermostat per **physically controllable zone**. Includes a dependency-free thermostat/history dashboard card.
 
@@ -21,9 +21,9 @@ Two Ecobees controlling two hot-water baseboard zones can provide at most two in
 
 ## Manual installation
 
-1. Back up HA. Extract `dist/unified-climate.zip` somewhere outside your HA configuration directory.
+1. Back up HA. Extract `dist/climate-club.zip` somewhere outside your HA configuration directory.
 2. Copy **only** `custom_components/unified_climate/` into `<HA configuration>/custom_components/unified_climate/` (avoid an extra nested directory). All runtime files, including frontend and translations, are inside that folder. No Python packages need installing on HA.
-3. Restart HA. Go to **Settings → Devices & services → Add integration → Unified Climate**.
+3. Restart HA. Go to **Settings → Devices & services → Add integration → Climate Club**.
 4. Add one entry per physical zone. Select temperature sensors (°F or °C), heating climate entities and/or cooling climate entities. Choose optional outdoor temperature sensor; multiple zones can share sensors. Entity selectors allow entities temporarily offline; unavailable or unsupported actuator metadata prevents safe starts. Only equipment supporting individual Heat/Cool and Off plus a single temperature setpoint is supported in v1.
 5. Keep each virtual thermostat Off while reviewing configuration. Configure alerts and native fallback behavior. Then deliberately select the desired mode and observe a full startup, run, stop, sensor-failure and network-recovery cycle under supervision. No real equipment commissioning was performed by this project.
 
@@ -42,7 +42,7 @@ The integration menu's **Configure** form changes mappings and numeric settings.
 | cool_min_on / cool_min_off | 300 / 300 | Per-actuator cooling timers (minimum 180s); consult AC manufacturer |
 | startup_delay | 300 | Lockout after deliberate takeover; minimum 60s, plus minimum-off |
 | changeover_delay | 600 | Required all-reported-off interval between house directions; largest configured zone delay wins |
-| stale_after | 900 | Indoor/control and feedback sensor freshness; choose to match sensor reporting |
+| stale_after | 900 | Maximum age of cooling-response feedback reports. Indoor control sensors are treated as fresh whenever they are available (not `unknown`/`unavailable`), because push-on-change sources stay silent while a room is steady. |
 | outdoor_stale_after | 10800 | Outdoor-only maximum HA report age; configurable 60–86400 seconds. Does not relax indoor safety freshness. |
 | heat_demand / cool_demand | 75 / 65 | Native thermostat demand targets, bounded as above |
 | trusted_action_entities | none | Explicitly verified action reporters; never select an IR controller merely because its mode says Cool |
@@ -58,7 +58,7 @@ The heat/cool target gap is **not hysteresis**. In a zone with both heating and 
 - **Heat/cool** requires `target_temp_low` / `target_temp_high`, not an ambiguous single temperature. Explicit range changes preserve the submitted values and reject an insufficient gap with the required size and actual values. Unsupported/mixed single-and-range requests are rejected before changing targets or acquiring equipment.
 - Heating-only and cooling-only zones do not enforce a gap against an unused target. Existing combined-zone safety, setpoint bounds, timing and interlocks remain enforced. Tiny floating-point conversion errors at a valid gap boundary are tolerated, not real undersized gaps.
 
-The bundled card shows only the active target in Heat or Cool and only the supported target for single-direction zones. It shows both fields in Heat/cool (and while Off for a combined zone) and validates the configured gap locally before sending a range. Temperature controls remain Fahrenheit even when HA's display units are Celsius. Update its resource URL to `?v=0.2.2` after upgrading. Native HA thermostat cards/automations use the same backend validation.
+The bundled card shows only the active target in Heat or Cool and only the supported target for single-direction zones. It shows both fields in Heat/cool (and while Off for a combined zone) and validates the configured gap locally before sending a range. Temperature controls remain Fahrenheit even when HA's display units are Celsius. Update its resource URL to `?v=0.2.3` after upgrading. Native HA thermostat cards/automations use the same backend validation.
 
 ## Outdoor temperature source (0.2.1)
 
@@ -71,11 +71,11 @@ Both °C and °F are converted into the existing numeric outdoor history sensor.
 
 Weather providers can report hourly, so outdoor freshness is independent of indoor/control freshness. `outdoor_stale_after` defaults to 3 hours and checks the source's last HA report, including unchanged reports; it does not establish the provider observation's true age. Adjust it to your source. This remains graph-only and never changes heating/cooling demand.
 
-The card separately permits outdoor intervals up to `outdoor_max_gap_minutes` (default 180), while indoor `max_gap_minutes` remains 30. Unknown/unavailable samples always break either line. The outdoor line interpolates between available observations, not between measured continuous temperatures; it does not extend the last value into the future. For local outdoor sensors, you may lower `outdoor_max_gap_minutes` to 30. Update the dashboard resource URL to `?v=0.2.2` after upgrading.
+The card separately permits outdoor intervals up to `outdoor_max_gap_minutes` (default 180), while indoor `max_gap_minutes` remains 30. Unknown/unavailable samples always break either line. The outdoor line interpolates between available observations, not between measured continuous temperatures; it does not extend the last value into the future. For local outdoor sensors, you may lower `outdoor_max_gap_minutes` to 30. Update the dashboard resource URL to `?v=0.2.3` after upgrading.
 
 ## Advisory cooling temperature-response monitoring (0.2.0)
 
-No power-monitor hardware is required. In **Settings → Devices & services → Unified Climate → Configure**, enable **advisory cooling temperature-response monitoring** for the zone. It is **disabled by default**, including existing entries; no migration/recreation is required. Optionally select separate feedback temperature sensors; an empty selection uses the existing indoor sensors. °C and °F, finite/range validation and the zone's `stale_after` limit apply. Clearing the feedback list restores that default. These sensors do not replace the control sensors or alter control aggregation.
+No power-monitor hardware is required. In **Settings → Devices & services → Climate Club → Configure**, enable **advisory cooling temperature-response monitoring** for the zone. It is **disabled by default**, including existing entries; no migration/recreation is required. Optionally select separate feedback temperature sensors; an empty selection uses the existing indoor sensors. °C and °F, finite/range validation and the zone's `stale_after` limit apply. Clearing the feedback list restores that default. These sensors do not replace the control sensors or alter control aggregation.
 
 | Setting | Default | Allowed range / meaning |
 |---|---:|---|
@@ -103,7 +103,7 @@ Missing/invalid/stale feedback, unit changes and heating contamination invalidat
 
 Each zone adds **Cooling response** (`response`) and **Inferred cooling operation** (`inferred_operation`) sensors without replacing the existing trusted **Operation** sensor. Stable states are `disabled`, `observing_start`, `observing_stop`, `cooling_likely`, `stopped_likely`, `inconclusive`, `no_start_response`, and `continued_cooling`. The response sensor and climate `cooling_response` attributes expose reason, per-sensor baseline/post counts, slopes, report freshness, window sizes and thresholds; the climate/response sensor also exposes the bounded command audit. Counts update during observation; conclusions wait for the full window. Monotonic timing attributes are process-local diagnostics, not wall-clock timestamps; the command audit has UTC timestamps.
 
-Do not exclude the new sensors from Recorder if you want detailed history. Their string states are recorded timeline events, not numeric long-term statistics. The card discovers `history_sensors.inferred_operation` and fetches it with the existing authenticated `hass.callApi` history request. For manual mappings, add `sensors.inferred_operation: sensor.your_zone_inferred_cooling_operation`. Older entries/history mappings without this sensor still render normally. Keep the resource URL cache reference at **`?v=0.2.2`** after upgrading.
+Do not exclude the new sensors from Recorder if you want detailed history. Their string states are recorded timeline events, not numeric long-term statistics. The card discovers `history_sensors.inferred_operation` and fetches it with the existing authenticated `hass.callApi` history request. For manual mappings, add `sensors.inferred_operation: sensor.your_zone_inferred_cooling_operation`. Older entries/history mappings without this sensor still render normally. Keep the resource URL cache reference at **`?v=0.2.3`** after upgrading.
 
 Trusted reported actions remain solid red/blue/gray and take priority over inference. Inferred cooling is dashed blue; inferred stopped/idle is dashed neutral gray; observing/error/uncertain/disabled intervals without trusted feedback are dashed purple. The legend explicitly says **inferred**. Requested demand is never counted as inferred operation. Existing temperature gaps and outdoor dashed gold remain intact.
 
@@ -117,13 +117,15 @@ Enable HA Recorder and History and do not exclude these sensors. Long-term numer
 
 With HA HTTP enabled, the integration serves its bundled JS. Add **Settings → Dashboards → Resources → Add resource** (advanced mode):
 
-- URL: `/unified_climate/unified-climate-card.js?v=0.2.2`
+- URL: `/unified_climate/unified-climate-card.js?v=0.2.3`
 - Type: **JavaScript module**
 
 Then add a Manual dashboard card:
 
+The card type `custom:unified-climate-card` from earlier versions keeps working. The integration's internal domain, folder and resource path remain `unified_climate` so existing zones, entities and dashboards are not broken by the rename.
+
 ```yaml
-type: custom:unified-climate-card
+type: custom:climate-club-card
 entity: climate.your_zone
 hours: 24
 max_gap_minutes: 30
@@ -140,14 +142,14 @@ sensors:
 
 HA history is fetched through the frontend's authenticated `hass.callApi` connection (`GET /api/history/period/...`); no token entry or CDN is used. Chart history refreshes at most once a minute; range selector supports 1–72 hours. Modes and target controls call HA climate services only after user interaction. Control errors and absent history are displayed rather than replaced with demo data.
 
-If the integration static route is unavailable, copy `frontend/unified-climate-card.js` from the installed component to `<HA configuration>/www/unified-climate-card.js` and register `/local/unified-climate-card.js?v=0.2.2` instead. HACS **integration** installation does not automatically register Lovelace resources; that step is always separate. There is no visual card editor in v1.
+If the integration static route is unavailable, copy `frontend/unified-climate-card.js` from the installed component to `<HA configuration>/www/unified-climate-card.js` and register `/local/unified-climate-card.js?v=0.2.3` instead. HACS **integration** installation does not automatically register Lovelace resources; that step is always separate. There is no visual card editor in v1.
 
 ## HACS custom-repository installation
 
 1. In HACS, open **Custom repositories** from the menu.
 2. Add `https://github.com/Tumtum2814/climate-club` with type **Integration**.
-3. Find **Unified Climate**, download it, and restart Home Assistant.
-4. Add **Unified Climate** under **Settings → Devices & services** and configure a zone.
+3. Find **Climate Club**, download it, and restart Home Assistant.
+4. Add **Climate Club** under **Settings → Devices & services** and configure a zone.
 5. Register the bundled dashboard resource and add the card as described above.
 
 This repository follows the HACS integration layout and includes `hacs.json`, a versioned manifest with repository URLs and codeowner, a license, and a local brand asset. HACS installation on a live system has not been exercised. HACS default-list acceptance is a separate process and is not claimed. Requirements reference: https://www.hacs.xyz/docs/publish/integration/ .

@@ -85,12 +85,12 @@ def checked(hass, data, exclude=None):
     return validate(data, others, virtual)
 
 
-class UnifiedClimateConfigFlow(ConfigFlow, domain=DOMAIN):
+class ClimateClubConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     @staticmethod
     def async_get_options_flow(config_entry):
-        return UnifiedClimateOptionsFlow()
+        return ClimateClubOptionsFlow()
 
     async def async_step_user(self, user_input=None):
         errors = {}
@@ -108,7 +108,7 @@ class UnifiedClimateConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
 
-class UnifiedClimateOptionsFlow(OptionsFlow):
+class ClimateClubOptionsFlow(OptionsFlow):
     async def async_step_init(self, user_input=None):
         errors = {}
         current = {**DEFAULTS, **self.config_entry.data, **self.config_entry.options}

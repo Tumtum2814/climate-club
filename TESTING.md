@@ -1,5 +1,18 @@
 # Executed verification and boundaries
 
+## 0.2.3 heat-start and naming fix — current evidence
+
+Reported on live equipment: a zone in Heat with an ecobee (HomeKit) heater never started heating. Two causes:
+
+- The indoor control temperature expired after `stale_after` seconds without a *change*. HomeKit sensors report only on change, so a steady room became `None` and demand was forced Off. Indoor control sensors are now fresh whenever available; `unknown`/`unavailable` still force Off. `stale_after` now governs only cooling-response feedback reports.
+- The start sequence set the target before the mode and required the target to be confirmed. An ecobee reports no target while Off, so the mode command was never sent. Equipment reporting no target while Off now gets the mode first, then the target; other equipment keeps the original target-first order.
+
+RED → GREEN: `test_quiet_available_sensor_stays_fresh_and_keeps_heating` and `test_thermostat_without_target_while_off_gets_mode_before_setpoint` failed before the change and pass after. `test_unavailable_sensor_forces_off_before_min_on` (two cases) replaces the former age-based stale test.
+
+Display name changed to Climate Club (manifest, HACS, translations, README, archive name) and a `climate-club-card` card type was added. Domain, folder, resource path and the `unified-climate-card` type are unchanged for compatibility.
+
+Tests use synthetic HA service/state fixtures, not live equipment. All sections below are historical.
+
 ## 0.2.2 setpoint-band fix — current evidence
 
 Reproduced the reported exception through real HA `climate.set_temperature` services: Heat 74°F was rejected against the hidden Cool 75°F/default 2°F band. A combined Cool-mode/66°F service request incorrectly edited Heat because dispatch used the old Off mode. Heat-only/cool-only zones also enforced an unused opposing threshold. A valid decimal band failed because binary subtraction fell infinitesimally below the minimum.

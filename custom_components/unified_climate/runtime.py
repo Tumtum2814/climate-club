@@ -221,8 +221,32 @@ class Manager:
             return
         self.attempts[entity] = (self.clock(), desired)
         issued = None
+        # Some thermostats (ecobee via HomeKit) report no target temperature
+        # until they are in a heating/cooling mode, so a target set while Off
+        # can never be confirmed. Those are switched to the mode first.
+        mode_first = (
+            desired != "off"
+            and state.state != desired
+            and state.attributes.get("temperature") is None
+        )
+
+        async def set_mode():
+            nonlocal issued, issued_clock
+            issued = dt_util.utcnow().isoformat()
+            issued_clock = self.clock()
+            await self.hass.services.async_call(
+                "climate",
+                "set_hvac_mode",
+                {"entity_id": entity, "hvac_mode": desired},
+                blocking=True,
+            )
+
+        issued_clock = None
         try:
             if desired != "off":
+                if mode_first:
+                    self.potential[entity] = desired
+                    await set_mode()
                 await self.hass.services.async_call(
                     "climate",
                     "set_temperature",
@@ -232,16 +256,14 @@ class Manager:
                 state = self.hass.states.get(entity)
                 if not state or not target_matches(state):
                     zone.error = f"{entity}: target not confirmed; demand retained"
+                    if mode_first and entity in zone.config["coolers"]:
+                        self.cooling_outcome(
+                            zone, entity, desired, issued, issued_clock, "delivered"
+                        )
                     return
                 self.potential[entity] = desired
-            issued = dt_util.utcnow().isoformat()
-            issued_clock = self.clock()
-            await self.hass.services.async_call(
-                "climate",
-                "set_hvac_mode",
-                {"entity_id": entity, "hvac_mode": desired},
-                blocking=True,
-            )
+            if not mode_first:
+                await set_mode()
         except (HomeAssistantError, TimeoutError, ValueError) as err:
             zone.error = f"{entity}: {err}; demand retained"
             if entity in zone.config["coolers"]:
@@ -290,12 +312,16 @@ class Manager:
                 samples = []
                 for entity in c["sensors"]:
                     state = self.hass.states.get(entity)
+                    # Push-on-change sources (HomeKit, Zigbee) stay silent while
+                    # the room is steady, so age since the last change is not a
+                    # liveness signal. An available state is treated as fresh;
+                    # unavailable/unknown states are rejected as nonnumeric.
                     if state:
                         samples.append(
                             (
                                 state.state,
                                 state.attributes.get("unit_of_measurement"),
-                                (dt_util.utcnow() - state.last_updated).total_seconds(),
+                                0,
                             )
                         )
                 zone.temperature = aggregate(

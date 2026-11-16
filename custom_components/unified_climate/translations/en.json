@@ -1,5 +1,5 @@
 {
-  "title": "Unified Climate",
+  "title": "Climate Club",
   "config": {
     "step": {
       "user": {
@@ -25,7 +25,7 @@
           "cool_min_off": "Minimum cooling off (seconds)",
           "startup_delay": "Startup lockout (seconds)",
           "changeover_delay": "House heat/cool changeover delay (seconds)",
-          "stale_after": "Maximum sensor update age (seconds)",
+          "stale_after": "Maximum feedback report age (seconds)",
           "heat_demand": "Native heating demand setpoint (°F)",
           "response_enabled": "Enable advisory cooling temperature-response monitoring",
           "response_sensors": "Feedback temperature sensors (empty uses indoor sensors)",
@@ -73,7 +73,7 @@
           "cool_min_off": "Minimum cooling off (seconds)",
           "startup_delay": "Startup lockout (seconds)",
           "changeover_delay": "House heat/cool changeover delay (seconds)",
-          "stale_after": "Maximum sensor update age (seconds)",
+          "stale_after": "Maximum feedback report age (seconds)",
           "heat_demand": "Native heating demand setpoint (°F)",
           "response_enabled": "Enable advisory cooling temperature-response monitoring",
           "response_sensors": "Feedback temperature sensors (empty uses indoor sensors)",
